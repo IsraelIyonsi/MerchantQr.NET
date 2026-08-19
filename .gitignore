@@ -1,0 +1,9 @@
+bin/
+obj/
+artifacts/
+*.user
+.vs/
+
+# Internal planning / marketing artifacts, not part of the public package
+BUILD_SPEC.md
+LAUNCH-POST.md

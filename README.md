@@ -83,6 +83,19 @@ The checksum is **CRC-16/CCITT-FALSE**: polynomial `0x1021`, initial value `0xFF
 
 The implementation is pinned to the industry check value: the CRC of the ASCII string `123456789` is `0x29B1`, asserted directly in the test suite. `Parse` rejects any payload whose CRC does not match; `Build` always emits a valid one.
 
+`Build` emits the CRC as four **uppercase** hex characters, and `Parse` compares case-insensitively, so a payload carrying a lowercase CRC (some generators emit `6304abcd`) still validates.
+
+### Non-ASCII payloads
+
+By default the CRC is computed over each character's **Latin-1 low byte**, which is exact for the ASCII fields that dominate Pix and SGQR. For the rare payload that carries multibyte characters in a field (for example a UTF-8 merchant name), pass an explicit `Encoding` to `Parse` and `Build`; the default keeps the Latin-1 behaviour and is fully backward compatible.
+
+```csharp
+using System.Text;
+
+string payload = MerchantQrCode.Build(objects, Encoding.UTF8); // CRC over UTF-8 bytes
+QrPayload qr   = MerchantQrCode.Parse(payload, Encoding.UTF8);  // validated over UTF-8 bytes
+```
+
 ## Format, in one paragraph
 
 The payload is a flat concatenation of data objects. Each object is a 2-character ID, a 2-character zero-padded decimal length, then a value of exactly that length. `000201` means ID `00`, length `02`, value `01`. Reserved IDs include `00` (Payload Format Indicator), `52` (Merchant Category Code), `53` (Transaction Currency), `54` (Transaction Amount), `58` (Country Code), `59` (Merchant Name), `60` (Merchant City), `62` (Additional Data), and `63` (CRC). IDs `26`-`51`, `62`, `64` and `80`-`99` are nested templates whose value is itself a sequence of sub-objects.
@@ -93,7 +106,8 @@ Any scheme that profiles EMVCo MPM shares this framing and CRC, so the parser an
 
 ## Notes and limitations
 
-- The CRC is computed over Latin-1 bytes, matching payloads whose fields are ASCII (the overwhelmingly common case for Pix and SGQR). Payloads carrying multibyte UTF-8 in a field such as the Merchant Information Language template are outside this Latin-1 CRC model.
+- The CRC defaults to Latin-1 low bytes, matching payloads whose fields are ASCII (the overwhelmingly common case for Pix and SGQR). Payloads carrying multibyte UTF-8 in a field such as the Merchant Information Language template validate only when the matching `Encoding` is supplied to `Parse` and `Build` (see [Non-ASCII payloads](#non-ascii-payloads)).
+- On a duplicate top-level ID the **first** occurrence wins consistently: both `Get` and `GetSubObjects` return the first object's value and sub-objects.
 - Nested templates are parsed one level deep and exposed via `GetSubObjects`. A template value that is not well-formed sub-TLV is left opaque rather than rejected, so a payload with a valid top-level CRC still parses.
 - Values are surfaced as raw strings. Currency and amount typing, and per-scheme field validation, are the caller's job.
 

@@ -17,12 +17,17 @@ public static class MerchantQrCode
     /// Parses a Merchant-Presented Mode payload, validating its TLV structure and CRC.
     /// </summary>
     /// <param name="payload">The raw QR payload string.</param>
+    /// <param name="encoding">
+    /// The byte encoding used to validate the CRC, or <see langword="null"/> (the default) for
+    /// the Latin-1 low-byte model that is exact for ASCII payloads. Supply
+    /// <see cref="Encoding.UTF8"/> to validate a payload whose fields carry multibyte characters.
+    /// </param>
     /// <returns>The parsed payload.</returns>
     /// <exception cref="MerchantQrParseException">
     /// The payload is null, malformed (bad or truncated length), missing its CRC data
     /// object, or its CRC does not match the computed value.
     /// </exception>
-    public static QrPayload Parse(string payload)
+    public static QrPayload Parse(string payload, Encoding? encoding = null)
     {
         if (payload is null)
         {
@@ -30,7 +35,7 @@ public static class MerchantQrCode
         }
 
         IReadOnlyList<QrDataObject> objects = ParseObjects(payload);
-        ValidateCrc(payload, objects);
+        ValidateCrc(payload, objects, encoding);
         return new QrPayload(objects, BuildSubObjectMap(objects));
     }
 
@@ -40,11 +45,25 @@ public static class MerchantQrCode
     /// <param name="payload">The raw QR payload string.</param>
     /// <param name="result">The parsed payload on success; otherwise <see langword="null"/>.</param>
     /// <returns><see langword="true"/> when parsing succeeds; otherwise <see langword="false"/>.</returns>
-    public static bool TryParse(string payload, [NotNullWhen(true)] out QrPayload? result)
+    public static bool TryParse(string payload, [NotNullWhen(true)] out QrPayload? result) =>
+        TryParse(payload, null, out result);
+
+    /// <summary>
+    /// Attempts to parse a Merchant-Presented Mode payload with an explicit CRC encoding.
+    /// Never throws.
+    /// </summary>
+    /// <param name="payload">The raw QR payload string.</param>
+    /// <param name="encoding">
+    /// The byte encoding used to validate the CRC, or <see langword="null"/> for the Latin-1
+    /// low-byte default.
+    /// </param>
+    /// <param name="result">The parsed payload on success; otherwise <see langword="null"/>.</param>
+    /// <returns><see langword="true"/> when parsing succeeds; otherwise <see langword="false"/>.</returns>
+    public static bool TryParse(string payload, Encoding? encoding, [NotNullWhen(true)] out QrPayload? result)
     {
         try
         {
-            result = Parse(payload);
+            result = Parse(payload, encoding);
             return true;
         }
         catch (MerchantQrParseException)
@@ -60,9 +79,14 @@ public static class MerchantQrCode
     /// the caller is discarded and replaced.
     /// </summary>
     /// <param name="objects">The data objects, in the desired order, excluding the CRC.</param>
+    /// <param name="encoding">
+    /// The byte encoding used to compute the CRC, or <see langword="null"/> (the default) for
+    /// the Latin-1 low-byte model that is exact for ASCII payloads. Supply the same encoding to
+    /// <see cref="Parse(string, Encoding?)"/> to validate the result.
+    /// </param>
     /// <returns>The complete payload string with a valid CRC.</returns>
     /// <exception cref="ArgumentException">A data object is malformed (bad id or oversized value).</exception>
-    public static string Build(IEnumerable<QrDataObject> objects)
+    public static string Build(IEnumerable<QrDataObject> objects, Encoding? encoding = null)
     {
         ArgumentNullException.ThrowIfNull(objects);
 
@@ -79,7 +103,7 @@ public static class MerchantQrCode
 
         body.Append(FieldIds.Crc);
         body.Append(CrcParameters.ValueLength.ToString(TlvFormat.LengthFieldFormat, CultureInfo.InvariantCulture));
-        body.Append(Crc16Ccitt.ComputeHex(body.ToString()));
+        body.Append(Crc16Ccitt.ComputeHex(body.ToString(), encoding));
         return body.ToString();
     }
 
@@ -160,7 +184,7 @@ public static class MerchantQrCode
         return objects;
     }
 
-    private static void ValidateCrc(string payload, IReadOnlyList<QrDataObject> objects)
+    private static void ValidateCrc(string payload, IReadOnlyList<QrDataObject> objects, Encoding? encoding)
     {
         if (objects.Count == 0)
         {
@@ -182,7 +206,7 @@ public static class MerchantQrCode
 
         int checksumStart = payload.Length - CrcParameters.ValueLength;
         string covered = payload.Substring(0, checksumStart);
-        string expected = Crc16Ccitt.ComputeHex(covered);
+        string expected = Crc16Ccitt.ComputeHex(covered, encoding);
 
         if (!string.Equals(expected, crcObject.Value, StringComparison.OrdinalIgnoreCase))
         {
@@ -198,15 +222,13 @@ public static class MerchantQrCode
 
         foreach (QrDataObject o in objects)
         {
-            if (!NestedTemplates.IsNestedTemplate(o.Id))
+            if (!NestedTemplates.IsNestedTemplate(o.Id) || map.ContainsKey(o.Id))
             {
                 continue;
             }
 
-            if (TryParseSubObjects(o.Value, out IReadOnlyList<QrDataObject> subs))
-            {
-                map[o.Id] = subs;
-            }
+            TryParseSubObjects(o.Value, out IReadOnlyList<QrDataObject> subs);
+            map[o.Id] = subs;
         }
 
         return map;

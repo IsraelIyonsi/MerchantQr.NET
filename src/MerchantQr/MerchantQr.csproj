@@ -10,7 +10,7 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
 
     <PackageId>MerchantQr.Net</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Authors>Israel Iyonsi</Authors>
     <Description>Correct, zero-dependency parser and generator for EMVCo Merchant-Presented Mode (MPM) QR code payloads, the TLV format behind Pix (Brazil), SGQR (Singapore) and many national merchant-QR schemes. CRC-16/CCITT-FALSE validated, deterministic, offline, Native AOT clean.</Description>
     <PackageTags>emvco;emv;qr;qrcode;mpm;pix;sgqr;payments;merchant;fintech;tlv;crc16</PackageTags>

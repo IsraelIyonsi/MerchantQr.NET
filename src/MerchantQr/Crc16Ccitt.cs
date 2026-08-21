@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text;
 using MerchantQr.Internal;
 
 namespace MerchantQr;
@@ -11,26 +12,31 @@ namespace MerchantQr;
 internal static class Crc16Ccitt
 {
     /// <summary>
-    /// Computes the CRC-16/CCITT-FALSE checksum over the Latin-1 bytes of <paramref name="input"/>.
+    /// Computes the CRC-16/CCITT-FALSE checksum over the bytes of <paramref name="input"/>.
+    /// When <paramref name="encoding"/> is <see langword="null"/> (the default) each character
+    /// is read as its Latin-1 low byte, which is exact for ASCII payloads; supply an
+    /// <see cref="Encoding"/> such as <see cref="Encoding.UTF8"/> to checksum the encoded bytes
+    /// of a payload carrying multibyte characters.
     /// </summary>
-    /// <param name="input">The text to checksum. Characters are read as Latin-1 (low byte).</param>
+    /// <param name="input">The text to checksum.</param>
+    /// <param name="encoding">The byte encoding, or <see langword="null"/> for the Latin-1 low-byte default.</param>
     /// <returns>The 16-bit checksum.</returns>
-    public static ushort Compute(string input)
+    public static ushort Compute(string input, Encoding? encoding = null)
     {
         ushort crc = CrcParameters.InitialValue;
 
-        foreach (char c in input)
+        if (encoding is null)
         {
-            crc ^= (ushort)((byte)c << CrcParameters.ByteWidthBits);
-
-            for (int bit = 0; bit < CrcParameters.BitsPerByte; bit++)
+            foreach (char c in input)
             {
-                bool highBitSet = (crc & CrcParameters.HighBitMask) != 0;
-                crc = (ushort)(crc << 1);
-                if (highBitSet)
-                {
-                    crc ^= CrcParameters.Polynomial;
-                }
+                crc = Update(crc, (byte)c);
+            }
+        }
+        else
+        {
+            foreach (byte b in encoding.GetBytes(input))
+            {
+                crc = Update(crc, b);
             }
         }
 
@@ -41,7 +47,25 @@ internal static class Crc16Ccitt
     /// Computes the checksum and formats it as four uppercase hexadecimal characters.
     /// </summary>
     /// <param name="input">The text to checksum.</param>
+    /// <param name="encoding">The byte encoding, or <see langword="null"/> for the Latin-1 low-byte default.</param>
     /// <returns>The checksum as a 4-character uppercase hex string.</returns>
-    public static string ComputeHex(string input) =>
-        Compute(input).ToString(CrcParameters.ValueFormat, CultureInfo.InvariantCulture);
+    public static string ComputeHex(string input, Encoding? encoding = null) =>
+        Compute(input, encoding).ToString(CrcParameters.ValueFormat, CultureInfo.InvariantCulture);
+
+    private static ushort Update(ushort crc, byte value)
+    {
+        crc ^= (ushort)(value << CrcParameters.ByteWidthBits);
+
+        for (int bit = 0; bit < CrcParameters.BitsPerByte; bit++)
+        {
+            bool highBitSet = (crc & CrcParameters.HighBitMask) != 0;
+            crc = (ushort)(crc << 1);
+            if (highBitSet)
+            {
+                crc ^= CrcParameters.Polynomial;
+            }
+        }
+
+        return crc;
+    }
 }

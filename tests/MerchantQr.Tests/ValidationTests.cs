@@ -4,6 +4,8 @@ namespace MerchantQr.Tests;
 
 public class ValidationTests
 {
+    private const int CrcHexLength = 4;
+
     private static string ValidPayload() => MerchantQrCode.Build(new QrDataObject[]
     {
         new("00", "01"),
@@ -33,6 +35,18 @@ public class ValidationTests
 
         Assert.False(MerchantQrCode.TryParse(tampered, out QrPayload? parsed));
         Assert.Null(parsed);
+    }
+
+    [Fact]
+    public void Parse_LowercaseCrc_Validates()
+    {
+        // Build emits uppercase hex; Parse compares case-insensitively, so a lowercase CRC
+        // (as some generators emit) still validates.
+        string payload = ValidPayload();
+        string lowered = payload[..^CrcHexLength] + payload[^CrcHexLength..].ToLowerInvariant();
+
+        Assert.True(MerchantQrCode.TryParse(lowered, out QrPayload? parsed));
+        Assert.NotNull(parsed);
     }
 
     [Fact]
